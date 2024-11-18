@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email Sender with Dynamic Credentials</title>
+    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"
+    ></script>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module">
+      let currentCredentials = {
+        publicKey: "",
+        serviceId: "",
+        templateId: "",
+      };
+
+      let sendingInProgress = false;
+
+      // Save a field's value to localStorage
+      function saveToLocalStorage(key, value) {
+        localStorage.setItem(key, value);
+      }
+
+      // Modal functions
+      function openModal() {
+        document.getElementById("modal").style.display = "flex";
+        document.getElementById("publicKey").value =
+          currentCredentials.publicKey;
+        document.getElementById("serviceId").value =
+          currentCredentials.serviceId;
+        document.getElementById("templateId").value =
+          currentCredentials.templateId;
+      }
+
+      function closeModal() {
+        document.getElementById("modal").style.display = "none";
+      }
+
+      function showNotification(message, isError = false) {
+        const banner = document.getElementById("notificationBanner");
+        banner.textContent = message;
+        banner.style.display = "block";
+        banner.style.backgroundColor = isError ? "red" : "green";
+        setTimeout(() => {
+          banner.style.display = "none";
+        }, 5000);
+      }
+
+      function updateEmailJS() {
+        const publicKey = document.getElementById("publicKey").value;
+        const serviceId = document.getElementById("serviceId").value;
+        const templateId = document.getElementById("templateId").value;
+
+        localStorage.setItem(
+          "emailJSCredentials",
+          JSON.stringify({ publicKey, serviceId, templateId })
+        );
+
+        currentCredentials = { publicKey, serviceId, templateId };
+        emailjs.init(currentCredentials.publicKey);
+        showNotification("EmailJS credentials updated!");
+        closeModal();
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function sendEmails(event) {
+        event.preventDefault();
+        if (sendingInProgress) return;
+
+        sendingInProgress = true;
+
+        const fromName = document.getElementById("fromName").value;
+        const subject = document.getElementById("subject").value;
+        const message = document.getElementById("message").value;
+        let emailList = document
+          .getElementById("emailList")
+          .value.split("\n")
+          .map((email) => email.trim())
+          .filter((email) => email);
+
+        localStorage.setItem("emailList", emailList.join("\n"));
+
+        if (
+          !currentCredentials.publicKey ||
+          !currentCredentials.serviceId ||
+          !currentCredentials.templateId
+        ) {
+          alert("EmailJS credentials are not set. Please update them.");
+          openModal();
+          sendingInProgress = false;
+          return;
+        }
+
+        if (!fromName || !subject || !message || emailList.length === 0) {
+          alert("Please fill in all fields and provide at least one email.");
+          sendingInProgress = false;
+          return;
+        }
+
+        let sent = 0;
+        const totalEmails = emailList.length;
+
+        const stats = document.getElementById("stats");
+        stats.textContent = `Sent: ${sent}, Remaining: ${totalEmails}`;
+
+        try {
+          while (emailList.length > 0 && sendingInProgress) {
+            const email = emailList[0];
+            const emailData = {
+              from_name: fromName,
+              to_email: email,
+              subject,
+              message,
+            };
+
+            try {
+              const response = await emailjs.send(
+                currentCredentials.serviceId,
+                currentCredentials.templateId,
+                emailData
+              );
+              if (response.status === 200) {
+                sent++;
+                emailList.shift();
+                localStorage.setItem("emailList", emailList.join("\n"));
+                document.getElementById("emailList").value =
+                  emailList.join("\n");
+                stats.textContent = `Sent: ${sent}, Remaining: ${emailList.length}`;
+                await sleep(400);
+              } else {
+                showNotification(
+                  `Error sending to ${email}: Status ${response}`,
+                  true
+                );
+                break;
+              }
+            } catch (error) {
+              console.error(`Error sending to ${email}:`, error.text);
+              showNotification(
+                `Error sending to ${email}: ${error.text}`,
+                true
+              );
+              break;
+            }
+          }
+          if (emailList.length === 0)
+            showNotification("All emails sent successfully!");
+        } catch (error) {
+          console.error("Error during sending emails:", error);
+          showNotification("Unexpected error during email sending.", true);
+        } finally {
+          sendingInProgress = false;
+        }
+      }
+
+      function stopSending() {
+        sendingInProgress = false;
+        showNotification("Email sending stopped by user.", true);
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        // Restore saved values
+        const savedCredentials = localStorage.getItem("emailJSCredentials");
+        if (savedCredentials) {
+          currentCredentials = JSON.parse(savedCredentials);
+          emailjs.init(currentCredentials.publicKey);
+        }
+
+        const savedFields = ["fromName", "subject", "message", "emailList"];
+        savedFields.forEach((field) => {
+          const savedValue = localStorage.getItem(field);
+          if (savedValue) document.getElementById(field).value = savedValue;
+        });
+
+        // Save input changes to localStorage
+        savedFields.forEach((field) => {
+          const element = document.getElementById(field);
+          element.addEventListener("input", () =>
+            saveToLocalStorage(field, element.value)
+          );
+        });
+
+        document
+          .getElementById("configureButton")
+          .addEventListener("click", openModal);
+        document
+          .getElementById("modalCloseButton")
+          .addEventListener("click", closeModal);
+        document
+          .getElementById("emailSenderForm")
+          .addEventListener("submit", sendEmails);
+        document
+          .getElementById("updateCredentials")
+          .addEventListener("click", updateEmailJS);
+        document
+          .getElementById("stopButton")
+          .addEventListener("click", stopSending);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="notificationBanner" class="notification-banner"></div>
+    <h1>Email Sender</h1>
+    <br />
+    <form id="emailSenderForm">
+      <label for="fromName">Your Name</label>
+      <input type="text" id="fromName" required />
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" required />
+      <label for="message">Message</label>
+      <textarea id="message" rows="4" required></textarea>
+      <label for="emailList">Email List</label>
+      <textarea id="emailList" rows="6" required></textarea>
+      <p id="stats"></p>
+      <div class="mainbtn">
+        <button type="submit" id="send">Send Emails</button>
+        <button id="stopButton">Stop Sending</button>
+      </div>
+      <button id="configureButton">Configure EmailJS</button>
+    </form>
+
+    <div id="modal" class="modal">
+      <div class="modal-content">
+        <span id="modalCloseButton" class="close">&times;</span>
+        <h2>Update EmailJS Credentials</h2>
+        <label for="publicKey">Public Key</label>
+        <input type="text" id="publicKey" required />
+        <label for="serviceId">Service ID</label>
+        <input type="text" id="serviceId" required />
+        <label for="templateId">Template ID</label>
+        <input type="text" id="templateId" required />
+        <button id="updateCredentials">Update Credentials</button>
+      </div>
+    </div>
+  </body>
+</html>
