@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Email Sender with Dynamic Credentials</title>
-    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
     <script
       type="text/javascript"
       src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"
@@ -22,6 +21,19 @@
       // Save a field's value to localStorage
       function saveToLocalStorage(key, value) {
         localStorage.setItem(key, value);
+      }
+
+      // Retrieve total emails sent from localStorage or initialize it
+      function getTotalEmailsSent() {
+        return parseInt(localStorage.getItem("totalEmailsSent") || "0", 10);
+      }
+
+      // Update total emails sent in localStorage
+      function updateTotalEmailsSent(newEmailsSent) {
+        const currentTotal = getTotalEmailsSent();
+        const updatedTotal = currentTotal + newEmailsSent;
+        localStorage.setItem("totalEmailsSent", updatedTotal);
+        return updatedTotal;
       }
 
       // Modal functions
@@ -132,7 +144,9 @@
                 document.getElementById("emailList").value =
                   emailList.join("\n");
                 stats.textContent = `Sent: ${sent}, Remaining: ${emailList.length}`;
-                await sleep(400);
+                // Increment the total emails sent in localStorage
+                updateTotalEmailsSent(1);
+                await sleep(5000);
               } else {
                 showNotification(
                   `Error sending to ${email}: Status ${response}`,
@@ -149,8 +163,13 @@
               break;
             }
           }
-          if (emailList.length === 0)
-            showNotification("All emails sent successfully!");
+
+          if (emailList.length === 0) {
+            const updatedTotal = updateTotalEmailsSent(sent);
+            showNotification(
+              `All emails sent successfully! Total emails sent: ${updatedTotal}`
+            );
+          }
         } catch (error) {
           console.error("Error during sending emails:", error);
           showNotification("Unexpected error during email sending.", true);
@@ -177,6 +196,10 @@
           const savedValue = localStorage.getItem(field);
           if (savedValue) document.getElementById(field).value = savedValue;
         });
+
+        const totalEmailsSent = getTotalEmailsSent();
+        const stats = document.getElementById("stats");
+        stats.textContent = `Total emails sent: ${totalEmailsSent}`;
 
         // Save input changes to localStorage
         savedFields.forEach((field) => {
@@ -220,7 +243,6 @@
       <p id="stats"></p>
       <div class="mainbtn">
         <button type="submit" id="send">Send Emails</button>
-        <button id="stopButton">Stop Sending</button>
       </div>
       <button id="configureButton">Configure EmailJS</button>
     </form>
